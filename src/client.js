@@ -438,9 +438,11 @@ $('draft-form').addEventListener('submit',async event=>{
   if (changed) {state.items=[];state.pending=[];state.reviewed=[];state.approved=false;files=[];}
   state.draft=draft;state.accepted=true;await persist();
   lock(false);displayReview();displayFiles();message();show('review');
+  await generateQuestions();
 });
-$('generate').addEventListener('click',async()=>{
-  if (busy || !state.accepted) return;
+$('generate').addEventListener('click',generateQuestions);
+async function generateQuestions() {
+  if (busy || !state.accepted || state.items.length>=plan(state.config).length) return;
   lock(true);
   try {
     const total=plan(state.config).length;
@@ -465,7 +467,7 @@ $('generate').addEventListener('click',async()=>{
     message('Seluruh soal tersedia. Buka tiap butir untuk menelaah dan menyetujuinya.');
   } catch(error) {message(error.message,true);}
   finally {lock(false);displayReview();}
-});
+}
 $('approve-check').addEventListener('change',()=>{$('approve').disabled=busy || !$('approve-check').checked;});
 $('approve').addEventListener('click',async()=>{
   if(busy || !$('approve-check').checked || state.reviewed.length!==plan(state.config).length) return;

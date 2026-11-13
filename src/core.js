@@ -7,7 +7,7 @@ const normalized = value => clean(value).normalize('NFKC').toLocaleLowerCase().r
 function plan(config) {
   return config.counts.flatMap((count, type) => Array.from({length: count}, () => type)).map((type, index) => ({type, no:index + 1}));
 }
-const batchLimit = 3;
+const batchLimit = 6;
 function nextBatch(config, start) {
   const entries = plan(config);
   const first = entries[start];

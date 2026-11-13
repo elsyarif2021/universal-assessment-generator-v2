@@ -139,28 +139,30 @@ function normalizeItem(item) {
     ...(Array.isArray(item.rubric) && {rubric:item.rubric.map(row=>row && {...row,points:numeric(row.points)})})
   };
 }
-async function writeQuestions(p,config,draft,batch,prior,feedback = []) {
+async function writeQuestions(p,config,draft,batch,prior,repair) {
   const {type}=batch[0];
   const format = isPG(type)
     ? {options:Array.from({length:config.options},(_,i)=>'Option '+alphabet[i]),keys:type===1 ? ['A','C'] : ['B']}
     : {answer:'Model answer',rubric:[{criterion:'Criterion',points:2}]};
+  const count = repair ? 3 : batch.length;
   const example = {items:[{stem:'Question text',indicator:'Assessment indicator',tp:1,level:[1,3].includes(type)?'C4':'C2',difficulty:'Sedang',explanation:'Reason for the correct response',analysis:'Qualitative review',concept:'Study takeaway',...format}]};
   const rule = isPG(type)
     ? 'Use exactly '+config.options+' unique, non-empty option strings with no letter prefixes. Keys are uppercase option letters from '+alphabet.slice(0,config.options).split('').join(', ')+'. Vary answer positions between questions.'
     : 'The rubric is a non-empty array of criterion and integer points (1–10 per row, 20 maximum total).';
-  return generateJSON(p,`Write exactly ${batch.length} distinct ${types[type]} item(s) as a JSON object with an items array. The app assigns question numbers and types. Write only question content, without number or type fields. Use these content fields: ${JSON.stringify(example)}. The example is a format guide, not question content. ${questionRules[type]} ${rule} Use difficulty "Mudah", "Sedang", or "Sukar". TP is a 1-based number from 1 to ${draft.tp.length}. Keep stems, explanations and analyses concise. Explain every correct answer. Concept summarizes the lesson independently of the item. Avoid prior stems. Add "visual" only when needed: {"kind":"bar" or "line","labels":["…"],"values":[1,2],"caption":"…"} with 2–10 labels of at most 20 characters each, {"kind":"circle","angle":90,"radius":7,"caption":"…"}, or {"kind":"image","prompt":"English illustration prompt","caption":"…"} for non-precise illustrations. Use JSON strings and plain Unicode notation without Markdown. If validation feedback is supplied, correct every issue. Return only JSON.`,{
-    config:configData(config),draft,prior:prior.slice(-12).map(stem=>stem.slice(0,240)),feedback
+  return generateJSON(p,`Write exactly ${count} distinct ${types[type]} item(s) as a JSON object with an items array. The app assigns question numbers and types. Write only question content, without number or type fields. Use these content fields: ${JSON.stringify(example)}. The example is a format guide, not question content. ${questionRules[type]} ${rule} Use difficulty "Mudah", "Sedang", or "Sukar". TP is a 1-based number from 1 to ${draft.tp.length}. Keep stems, explanations and analyses concise. Explain every correct answer. Concept summarizes the lesson independently of the item. Use the requested item positions to vary the concept and approach. Treat prior stems as an exclusion list. Change the reasoning task, context or data, not merely the wording. During repair, write independent alternatives and never reuse a rejected stem. Add "visual" only when needed: {"kind":"bar" or "line","labels":["…"],"values":[1,2],"caption":"…"} with 2–10 labels of at most 20 characters each, {"kind":"circle","angle":90,"radius":7,"caption":"…"}, or {"kind":"image","prompt":"English illustration prompt","caption":"…"} for non-precise illustrations. Use JSON strings and plain Unicode notation without Markdown. If validation feedback is supplied, correct every issue. Return only JSON.`,{
+    config:configData(config),draft,positions:batch.map(item=>item.no),prior:prior.map(stem=>stem.slice(0,200)),feedback:repair?.feedback || [],rejectedStems:repair?.stems || []
   });
 }
 async function generateBatch(p,config,draft,batch,prior) {
   const seen = new Set(prior.map(normalized));
   const accepted = [];
+  const rejectedStems = [];
   let feedback = [];
   for (let attempt=0;attempt<2;attempt++) {
     const requested = attempt === 0 ? batch : batch.slice(0,1);
     let result;
     try {
-      result = await writeQuestions(p,config,draft,requested,prior,feedback);
+      result = await writeQuestions(p,config,draft,requested,prior,attempt ? {feedback,stems:rejectedStems} : null);
     } catch (error) {
       if (error.status !== 422) throw error;
       feedback = [error.message];
@@ -169,18 +171,22 @@ async function generateBatch(p,config,draft,batch,prior) {
     const candidates = Array.isArray(result?.items) ? result.items
       : Array.isArray(result) ? result
       : requested.length === 1 && result?.stem ? [result] : [];
-    for (const [index,expected] of requested.entries()) {
-      const content = normalizeItem(candidates[index]);
-      if (!content) {
-        feedback = ['AI belum mengirim isi soal pada posisi ini.'];
-        break;
+    feedback = ['AI belum mengirim isi soal yang bisa diperiksa.'];
+    for (const candidate of candidates) {
+      const content = normalizeItem(candidate);
+      if (!content) continue;
+      const item = {...content,...requested[accepted.length]};
+      const stem = normalized(item.stem);
+      const issues = itemErrors(item,requested[accepted.length],config,draft);
+      if (stem && seen.has(stem)) issues.push('Batang soal berulang.');
+      if (issues.length) {
+        feedback = issues;
+        if (stem && rejectedStems.length < 6) rejectedStems.push(clean(item.stem).slice(0,300));
+        continue;
       }
-      const item = {...content,...expected};
-      feedback = itemErrors(item,expected,config,draft);
-      if (item && seen.has(normalized(item.stem))) feedback.push('Batang soal berulang.');
-      if (feedback.length) break;
       accepted.push(item);
-      seen.add(normalized(item.stem));
+      seen.add(stem);
+      if (accepted.length === requested.length) break;
     }
     if (accepted.length) return accepted;
   }

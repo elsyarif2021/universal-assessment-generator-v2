@@ -70,13 +70,13 @@ const partial=responseFor((_,prompt)=>{
   assert.match(prompt,/exactly 3 distinct/);
   return {items:[regular[0],{...regular[1],keys:['A','B']},regular[2]]};
 });
-assert.deepEqual(await (await hit('/api/batch',{config:regularConfig,draft,start:0},partial)).json(),{items:[regular[0]]});
+assert.deepEqual(await (await hit('/api/batch',{config:regularConfig,draft,start:0},partial)).json(),{items:[regular[0],{...regular[2],no:2}]});
 assert.equal(calls,1);
 calls=0;
 const repair=responseFor(({feedback},prompt)=>{
   calls++;
   if(calls===1) return {items:[{...regular[1],options:['A. 2','B. 2','C. 7']}]};
-  assert.match(prompt,/exactly 1 distinct/);
+  assert.match(prompt,/exactly 3 distinct/);
   assert.match(feedback[0],/berulang/);
   return {items:[{...regular[1],no:'2',type:'0',tp:'TP 1',level:'c2',difficulty:'sedang',keys:[' b ']}]};
 });
@@ -113,6 +113,20 @@ const withoutMetadata=responseFor(()=>{
 });
 const continued=await (await hit('/api/batch',resumeBody,withoutMetadata)).json();
 assert.deepEqual(continued.items.map(({no,type})=>[no,type]),[[17,0],[18,0]]);
+const before15=earlier.slice(0,14);
+const newQuestion={...seventeen,stem:'Jelaskan perbedaan antara frekuensi dan persentase.'};
+let repeatedCalls=0;
+const repairedDuplicate=responseFor((request,prompt)=>{
+  repeatedCalls++;
+  assert.ok(request.prior.includes(before15[0]));
+  if(repeatedCalls===1) return {items:[{...seventeen,stem:before15[0]}]};
+  assert.match(prompt,/exactly 3 distinct/);
+  assert.deepEqual(request.positions,[15]);
+  assert.ok(request.rejectedStems.includes(before15[0]));
+  return {items:[{...seventeen,stem:before15[1]},newQuestion]};
+});
+assert.deepEqual(await (await hit('/api/batch',{...resumeBody,start:14,prior:before15},repairedDuplicate)).json(),{items:[{...newQuestion,no:15}]});
+assert.equal(repeatedCalls,2);
 const repeated=responseFor(()=>({items:[{...seventeen,stem:earlier[15]}]}));
 const repeatedFailure=await hit('/api/batch',resumeBody,repeated);
 assert.equal(repeatedFailure.status,422);
