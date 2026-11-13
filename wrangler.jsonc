@@ -3,7 +3,9 @@
   "main": "dist/server/index.js",
   "compatibility_date": "2026-11-13",
   "vars": {
-    "WORKERS_AI_ONLY": "true"
+    "WORKERS_AI_ONLY": "true",
+    "TEXT_AI_PROVIDER": "ollama",
+    "OLLAMA_MODEL": "deepseek-v4.1-flash:1017-cloud"
   },
   "ai": {
     "binding": "AI"

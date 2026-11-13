@@ -180,4 +180,37 @@ const capacity=await hit('/api/chat',question,{AI:{run:async model=>{
 }}});
 assert.deepEqual(await capacity.json(),{answer:'Materi tersedia.'});
 assert.equal(capacityCalls,2);
+const ollamaConfig={TEXT_AI_PROVIDER:'ollama',WORKERS_AI_ONLY:'true'};
+const missingOllama=await hit('/api/chat',question,{...ollamaConfig,...bound});
+assert.equal(missingOllama.status,503);
+assert.match((await missingOllama.json()).error,/OLLAMA_API_KEY/);
+const ollamaEnv={...ollamaConfig,OLLAMA_API_KEY:'test-only-secret'};
+const ollamaHome=await (await hit('/',null,ollamaEnv)).text();
+assert.match(ollamaHome,/Ollama Cloud tersedia/);
+assert.doesNotMatch(ollamaHome,/test-only-secret|id="ai-form"/);
+assert.equal((await (await hit('/api/chat',null,ollamaEnv)).json()).textProvider,'ollama');
+const realFetch=globalThis.fetch;
+try {
+  const replies=['Penjelasan Ollama.',JSON.stringify(draft),JSON.stringify({items:[items[0]]})];
+  globalThis.fetch=async (url,init)=>{
+    assert.equal(url,'https://ollama.com/api/chat');
+    assert.equal(init.headers.Authorization,'Bearer test-only-secret');
+    const input=JSON.parse(init.body);
+    assert.equal(input.model,'deepseek-v4.1-flash:1017');
+    assert.equal(input.stream,false);
+    assert.equal(Object.hasOwn(input,'format'),false);
+    return Response.json({message:{content:replies.shift()}});
+  };
+  assert.deepEqual(await (await hit('/api/chat',question,ollamaEnv)).json(),{answer:'Penjelasan Ollama.'});
+  assert.deepEqual(await (await hit('/api/draft',{config},ollamaEnv)).json(),draft);
+  assert.deepEqual(await (await hit('/api/batch',{config,draft,start:0},ollamaEnv)).json(),{items:[items[0]]});
+  assert.equal(replies.length,0);
+  globalThis.fetch=async (_url,init)=>{
+    assert.equal(JSON.parse(init.body).model,'glm-5.3-flash');
+    return Response.json({message:{content:'Materi GLM.'}});
+  };
+  assert.deepEqual(await (await hit('/api/chat',question,{...ollamaEnv,OLLAMA_MODEL:'glm-5.3-flash:cloud'})).json(),{answer:'Materi GLM.'});
+  globalThis.fetch=async ()=>new Response(null,{status:429});
+  assert.equal((await hit('/api/chat',question,ollamaEnv)).status,429);
+} finally {globalThis.fetch=realFetch;}
 console.log('Konfigurasi, API dengan respons tiruan, validasi soal, dan ekspor DOCX lulus.');

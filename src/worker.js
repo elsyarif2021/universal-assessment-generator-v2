@@ -13,6 +13,39 @@ function provider(request, env) {
   if (!/^[a-f0-9]{32}$/i.test(account) || !/^[A-Za-z0-9_-]{20,256}$/.test(token)) return null;
   return {account,token,mode:saved ? 'server' : 'session'};
 }
+function textProvider(env, cloudflare) {
+  const token = env.OLLAMA_API_KEY?.trim();
+  if (token) {
+    const tag = env.OLLAMA_MODEL?.trim() || 'deepseek-v4.1-flash:1017-cloud';
+    return {ollama:{token,model:tag.replace(/:cloud$|-cloud$/,'')}};
+  }
+  return env.TEXT_AI_PROVIDER === 'ollama' ? {missingOllama:true} : cloudflare;
+}
+async function runOllama({token,model},input) {
+  let response;
+  try {
+    response = await fetch('https://ollama.com/api/chat',{
+      method:'POST',
+      headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model,messages:input.messages,stream:false,
+        ...(model.startsWith('gpt-oss') ? {think:'low'} : model.startsWith('deepseek-v4.1-flash') ? {think:false} : {}),
+        options:{temperature:input.temperature,num_predict:input.max_tokens}
+      }),
+      signal:AbortSignal.timeout(55000)
+    });
+  } catch {
+    throw problem('Ollama Cloud tidak merespons atau waktu tunggu habis. Coba lagi.',502);
+  }
+  if (response.status===401 || response.status===403) throw problem('Ollama Cloud menolak akses. Periksa secret OLLAMA_API_KEY dan akses model.',502);
+  if (response.status===429) throw problem('Ollama Cloud membatasi permintaan. Periksa pemakaian akun Ollama.',429);
+  if (response.status===404) throw problem('Model Ollama Cloud tidak ditemukan. Periksa OLLAMA_MODEL.',502);
+  if (!response.ok) throw problem('Ollama Cloud gagal memproses permintaan (HTTP '+response.status+').',502);
+  const payload = await response.json().catch(()=>null);
+  const content = payload?.message?.content;
+  if (!clean(content)) throw problem('Ollama Cloud mengembalikan jawaban kosong.',502);
+  return {response:content};
+}
 function workersAILimit(status,code,message) {
   if (code==='3036' || /\b3036\b|daily free allocation|daily (?:free )?(?:quota|limit)|10,?000 neurons/i.test(message)) {
     return problem('Kuota harian Workers AI habis (CF 3036). Coba lagi setelah reset pukul 07.00 WIB.',429);
@@ -26,6 +59,8 @@ function workersAILimit(status,code,message) {
   return null;
 }
 async function runAI(p, model, input) {
+  if (p?.missingOllama) throw problem('Ollama Cloud belum dikonfigurasi. Administrator perlu menambahkan secret OLLAMA_API_KEY pada Worker.',503);
+  if (p?.ollama) return runOllama(p.ollama,input);
   if (!p) throw problem('Hubungkan akun Cloudflare Workers AI melalui menu Pengaturan AI.', 503);
   if (p.binding) {
     try {return await p.binding.run(model,input);}
@@ -172,35 +207,37 @@ async function chat(p, data) {
       {role:'user',content:JSON.stringify({question,classroomContext:context})}
     ],temperature:0.4,max_tokens:850
   };
-  for (const model of chatModels) {
+  const models = p?.ollama || p?.missingOllama ? [textModel] : chatModels;
+  for (const model of models) {
     try {
       const result = await runAI(p,model,input);
       const payload = result?.result ?? result;
       const answer = clean(payload?.response ?? payload?.choices?.[0]?.message?.content ?? payload);
       if (answer && answer.length <= 7000) return json({answer});
     } catch (error) {
-      if (model === chatModels.at(-1) || (error.status !== 502 && !error.temporaryCapacity)) throw error;
+      if (model === models.at(-1) || (error.status !== 502 && !error.temporaryCapacity)) throw error;
     }
   }
-  throw problem('Model Workers AI belum menghasilkan jawaban yang dapat digunakan. Coba pertanyaan yang lebih singkat.',502);
+  throw problem('Model AI belum menghasilkan jawaban yang dapat digunakan. Coba pertanyaan yang lebih singkat.',502);
 }
 async function api(request,env,path) {
   const p = provider(request,env);
+  const text = textProvider(env,p);
   if (path === '/api/status' && request.method === 'GET') return json({mode:p?.binding ? 'binding' : p?.mode ?? 'missing'});
-  if (path === '/api/chat' && request.method === 'GET') return json({feature:'ai-chat-materi',build:buildId,binding:!!p?.binding});
-  if (bindingOnly(env) && !p && request.method === 'POST') return json({error:'Workers AI belum tersedia. Administrator perlu memeriksa binding AI pada Worker Cloudflare.'},503);
+  if (path === '/api/chat' && request.method === 'GET') return json({feature:'ai-chat-materi',build:buildId,binding:!!p?.binding,textProvider:text?.ollama || text?.missingOllama?'ollama':'cloudflare',textConfigured:!!text && !text.missingOllama});
+  if (bindingOnly(env) && !p && request.method === 'POST' && (path==='/api/image' || !text)) return json({error:'Workers AI belum tersedia. Administrator perlu memeriksa binding AI pada Worker Cloudflare.'},503);
   if (request.method !== 'POST') return json({error:'Metode tidak tersedia.'},405);
   if (path === '/api/test') {
-    const sample = await generateJSON(p,'Return {"ready":true}.',{language:'Indonesia'});
+    const sample = await generateJSON(text,'Return {"ready":true}.',{language:'Indonesia'});
     if (sample.ready !== true) throw problem('Model teks belum lolos uji respons.',502);
-    return json({text:true, image: !!(await generateImage(p,'Simple black and white school worksheet illustration of an apple on a white background, centered, no text.'))});
+    return json({text:true, image: !!p && !!(await generateImage(p,'Simple black and white school worksheet illustration of an apple on a white background, centered, no text.'))});
   }
   if (!['/api/draft','/api/batch','/api/image','/api/chat'].includes(path)) return json({error:'Halaman tidak ditemukan.'},404);
   const raw = await request.text();
   if (raw.length > 90000) throw problem('Ukuran permintaan terlalu besar.',413);
   let data;
   try {data = JSON.parse(raw);} catch {throw problem('Data permintaan tidak sah.');}
-  if (path === '/api/chat') return chat(p,data);
+  if (path === '/api/chat') return chat(text,data);
   if (path === '/api/image') {
     const prompt = clean(data?.prompt);
     if (!prompt || prompt.length > 2000) throw problem('Deskripsi ilustrasi harus berisi 1–2.000 karakter.');
@@ -210,7 +247,7 @@ async function api(request,env,path) {
   const invalid = validateConfig(config);
   if (invalid) throw problem(invalid);
   if (path === '/api/draft') {
-    const draft = await generateJSON(p,'Write operational CP, a sequential ATP (array of statements), and 3–8 measurable TP (array of statements) aligned to curriculum, grade, topic and requested language. Output {"cp":"…","atp":["…"],"tp":["…"]}.',configData(config));
+    const draft = await generateJSON(text,'Write operational CP, a sequential ATP (array of statements), and 3–8 measurable TP (array of statements) aligned to curriculum, grade, topic and requested language. Output {"cp":"…","atp":["…"],"tp":["…"]}.',configData(config));
     if (!validateDraft(draft)) throw problem('Draf CP, ATP, atau TP belum lengkap. Coba lagi.',502);
     return json(draft);
   }
@@ -219,15 +256,17 @@ async function api(request,env,path) {
   const batch = nextBatch(config,data.start);
   if (!batch.length) throw problem('Seluruh nomor telah dibuat.');
   const prior = Array.isArray(data.prior) ? data.prior.slice(0,100).map(clean).filter(Boolean) : [];
-  return json({items:await generateBatch(p,config,data.draft,batch,prior)});
+  return json({items:await generateBatch(text,config,data.draft,batch,prior)});
 }
 function homePage(env) {
-  const ready = typeof env.AI?.run === 'function';
-  if (!ready && !bindingOnly(env)) return assets['/'];
+  const text = textProvider(env,null);
+  const ready = text ? !!text.ollama : typeof env.AI?.run === 'function';
+  const label = text ? 'Ollama Cloud' : 'Workers AI';
+  if (!text && !ready && !bindingOnly(env)) return assets['/'];
   return assets['/']
     .replace(/<!-- api-settings-(nav|panel) -->[\s\S]*?<!-- \/api-settings-\1 -->/g,'')
     .replace(/<!-- ai-status -->.*?<!-- \/ai-status -->/,
-      '<span class="connection" role="status" data-ok="'+ready+'">'+(ready?'Workers AI tersedia':'Workers AI belum tersedia')+'</span>');
+      '<span class="connection" role="status" data-ok="'+ready+'">'+(label+(ready?' tersedia':text?' belum dikonfigurasi':' belum tersedia'))+'</span>');
 }
 export default {
   async fetch(request,env = {}) {

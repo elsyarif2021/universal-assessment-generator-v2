@@ -16,11 +16,17 @@ Di Cloudflare Dashboard, buka **Workers & Pages → Create application → Impor
 
 Jika nama Worker yang sudah ada berbeda, sesuaikan `name` di `wrangler.jsonc` atau gunakan `npx wrangler deploy --name NAMA-WORKER` sebagai deploy command. Jika aplikasi sebelumnya dibuat sebagai proyek **Pages**, buat proyek **Workers** dari repositori ini dan gunakan URL yang diberikan Worker setelah deploy sukses.
 
-`wrangler.jsonc` menetapkan `dist/server/index.js` sebagai entry point. Worker ini menyajikan halaman utama, CSS, JavaScript, dan rute `/api/*`. Buka URL utama Worker yang tampil di dashboard Cloudflare. Status **Workers AI tersedia** menandakan binding `AI` sudah terpasang. Guru dapat langsung membuat draf asesmen tanpa mengisi Account ID atau API Token. Jika statusnya **Workers AI belum tersedia**, periksa **Bindings** pada Worker dan pastikan binding Workers AI bernama `AI` ikut terdeploy.
+`wrangler.jsonc` menetapkan `dist/server/index.js` sebagai entry point.
 
-## AI Chat Materi
+## Ollama Cloud
 
-Buka **AI Chat Materi** untuk meminta penjelasan atau rangkuman dan mengajukan pertanyaan lanjutan. Klik **Tambahkan ke materi asesmen** pada jawaban yang ingin dipakai. Chat memakai binding Workers AI yang sama dan menghasilkan jawaban dari model tanpa penelusuran web.
+1. Buat API key di [Ollama](https://ollama.com/settings/keys).
+2. Di **Cloudflare → Worker → Settings → Variables and Secrets**, tambahkan **Secret** bernama `OLLAMA_API_KEY` dan simpan/deploy. Alternatif melalui Wrangler: `npx wrangler secret put OLLAMA_API_KEY`.
+3. Setelah deploy, buka URL Worker. Status **Ollama Cloud tersedia** menandakan secret terpasang. Kirim pertanyaan di **AI Chat Materi** untuk menguji respons.
+
+AI Chat Materi, draf CP/ATP/TP, dan soal memakai model Ollama Cloud `deepseek-v4.1-flash:1017-cloud` secara default. Worker mengirim ID API `deepseek-v4.1-flash:1017`. Ubah `OLLAMA_MODEL` di `wrangler.jsonc` untuk memilih model cloud lain, misalnya `glm-5.3-flash:cloud`. API key hanya dibaca server.
+
+Ilustrasi bebas tetap memakai binding Cloudflare Workers AI `AI`. Grafik numerik dibuat oleh aplikasi dari data soal. Jawaban AI Chat bisa dimasukkan ke kolom materi dengan **Tambahkan ke materi asesmen**. Chat menghasilkan jawaban tanpa penelusuran web.
 
 ## Pengembangan lokal
 
