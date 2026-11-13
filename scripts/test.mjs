@@ -160,4 +160,24 @@ const quota=await hit('/api/chat',question,{AI:{run:async ()=>{
 }}});
 assert.equal(quota.status,429);
 assert.equal(quotaCalls,1);
+assert.match((await quota.json()).error,/membatasi permintaan/);
+let dailyCalls=0;
+const daily=await hit('/api/chat',question,{AI:{run:async ()=>{
+  dailyCalls++;
+  throw Object.assign(new Error('Account limited'),{code:3036});
+}}});
+assert.equal(daily.status,429);
+assert.match((await daily.json()).error,/3036.*07.00 WIB/);
+assert.equal(dailyCalls,1);
+let capacityCalls=0;
+const capacity=await hit('/api/chat',question,{AI:{run:async model=>{
+  if (++capacityCalls===1) {
+    assert.match(model,/llama-3.1-8b/);
+    throw Object.assign(new Error('Capacity temporarily exceeded'),{status:429,code:3040});
+  }
+  assert.match(model,/llama-3.3-70b/);
+  return {response:'Materi tersedia.'};
+}}});
+assert.deepEqual(await capacity.json(),{answer:'Materi tersedia.'});
+assert.equal(capacityCalls,2);
 console.log('Konfigurasi, API dengan respons tiruan, validasi soal, dan ekspor DOCX lulus.');

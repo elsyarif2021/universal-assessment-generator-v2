@@ -1,4 +1,5 @@
 const textModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const chatModels = ['@cf/meta/llama-3.1-8b-instruct-fp8',textModel];
 const imageModel = '@cf/black-forest-labs/flux-1-schnell';
 const json = (value,status = 200) => Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
 const problem = (message,status = 400) => Object.assign(new Error(message),{status});
@@ -12,6 +13,18 @@ function provider(request, env) {
   if (!/^[a-f0-9]{32}$/i.test(account) || !/^[A-Za-z0-9_-]{20,256}$/.test(token)) return null;
   return {account,token,mode:saved ? 'server' : 'session'};
 }
+function workersAILimit(status,code,message) {
+  if (code==='3036' || /\b3036\b|daily free allocation|daily (?:free )?(?:quota|limit)|10,?000 neurons/i.test(message)) {
+    return problem('Kuota harian Workers AI habis (CF 3036). Coba lagi setelah reset pukul 07.00 WIB.',429);
+  }
+  if (code==='3040' || /\b3040\b|out of capacity|capacity temporarily exceeded/i.test(message)) {
+    return Object.assign(problem('Kapasitas model Workers AI sedang penuh (CF 3040). Coba lagi sebentar.',429),{temporaryCapacity:true});
+  }
+  if (status===429 || /rate limit|quota|neuron/i.test(message)) {
+    return problem('Workers AI membatasi permintaan. Coba lagi sebentar. Jika berulang, periksa pemakaian harian di Cloudflare.',429);
+  }
+  return null;
+}
 async function runAI(p, model, input) {
   if (!p) throw problem('Hubungkan akun Cloudflare Workers AI melalui menu Pengaturan AI.', 503);
   if (p.binding) {
@@ -20,10 +33,8 @@ async function runAI(p, model, input) {
       const status = Number(error?.status ?? error?.statusCode);
       const code = String(error?.code ?? '');
       console.warn('workers_ai_error',{model,status:Number.isInteger(status)?status:null,code:/^\d{1,8}$/.test(code)?code:null});
-      if (status===429 || /rate limit|quota|neuron/i.test(String(error?.message ?? ''))) {
-        throw problem('Kuota atau batas permintaan Workers AI tercapai. Periksa pemakaian di dashboard Cloudflare.',429);
-      }
-      throw problem('Workers AI gagal merespons. Periksa log Worker Cloudflare.',502);
+      throw workersAILimit(status,code,String(error?.message ?? '')) ??
+        problem('Workers AI gagal merespons. Periksa log Worker Cloudflare.',502);
     }
   }
   let response;
@@ -34,9 +45,11 @@ async function runAI(p, model, input) {
     });
   } catch {throw problem('Koneksi Cloudflare terputus atau melebihi waktu tunggu. Coba lagi.',502);}
   if ([401,403].includes(response.status)) throw problem('Cloudflare menolak akses. Periksa Account ID dan izin token Workers AI.',response.status);
-  if (response.status === 429) throw problem('Cloudflare membatasi permintaan. Tunggu sebentar, lalu lanjutkan dari batch yang gagal.',429);
   if (!response.ok) {
     const body = await response.json().catch(()=>null);
+    const detail = Array.isArray(body?.errors) ? body.errors[0] : null;
+    const limit = workersAILimit(response.status,String(detail?.code ?? ''),String(detail?.message ?? ''));
+    if (limit) throw limit;
     if (input.response_format && body?.errors?.some?.(error=>/JSON Mode couldn.t be met/i.test(error?.message || ''))) throw problem('Cloudflare belum dapat memenuhi format JSON.',422);
     throw problem('Cloudflare gagal menjalankan model (HTTP ' + response.status + '). Periksa kuota dan akses Workers AI.',502);
   }
@@ -48,6 +61,9 @@ async function runAI(p, model, input) {
   }
   const result = await response.json();
   if (result.success === false) {
+    const detail = Array.isArray(result.errors) ? result.errors[0] : null;
+    const limit = workersAILimit(response.status,String(detail?.code ?? ''),String(detail?.message ?? ''));
+    if (limit) throw limit;
     if (input.response_format && result.errors?.some?.(error=>/JSON Mode couldn.t be met/i.test(error?.message || ''))) throw problem('Cloudflare belum dapat memenuhi format JSON.',422);
     throw problem('Cloudflare melaporkan generasi gagal. Periksa kuota dan akses Workers AI.',502);
   }
@@ -154,16 +170,16 @@ async function chat(p, data) {
       {role:'system',content:'You are an educational subject tutor for school teachers. Explain, summarize or compare concepts, with worked examples as relevant. Follow the latest question, using classroom context only when the question leaves it open. Default to Indonesian. Use plain text, short headings and paragraphs, and keep the answer concise enough to reuse as assessment source material. Check calculations and factual claims. Indicate uncertainty where appropriate. You have no internet access. Never fabricate citations, browsing claims, URLs or official curriculum wording. Keep the conversation focused on learning material.'},
       ...history.map(turn=>({role:turn.role,content:clean(turn.text)})),
       {role:'user',content:JSON.stringify({question,classroomContext:context})}
-    ],temperature:0.4,max_tokens:1200
+    ],temperature:0.4,max_tokens:850
   };
-  for (const model of [textModel,'@cf/meta/llama-3.1-8b-instruct-fp8']) {
+  for (const model of chatModels) {
     try {
       const result = await runAI(p,model,input);
       const payload = result?.result ?? result;
       const answer = clean(payload?.response ?? payload?.choices?.[0]?.message?.content ?? payload);
       if (answer && answer.length <= 7000) return json({answer});
     } catch (error) {
-      if (error.status !== 502 || model !== textModel) throw error;
+      if (model === chatModels.at(-1) || (error.status !== 502 && !error.temporaryCapacity)) throw error;
     }
   }
   throw problem('Model Workers AI belum menghasilkan jawaban yang dapat digunakan. Coba pertanyaan yang lebih singkat.',502);
