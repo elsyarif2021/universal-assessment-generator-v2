@@ -2,8 +2,10 @@ const textModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const imageModel = '@cf/black-forest-labs/flux-1-schnell';
 const json = (value,status = 200) => Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
 const problem = (message,status = 400) => Object.assign(new Error(message),{status});
+const bindingOnly = env => env.WORKERS_AI_ONLY === 'true';
 function provider(request, env) {
   if (typeof env.AI?.run === 'function') return {binding:env.AI};
+  if (bindingOnly(env)) return null;
   const saved = env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN;
   const account = saved ? env.CLOUDFLARE_ACCOUNT_ID : request.headers.get('X-CF-Account') || '';
   const token = saved ? env.CLOUDFLARE_API_TOKEN : request.headers.get('X-CF-Token') || '';
@@ -129,6 +131,7 @@ async function generateBatch(p,config,draft,batch,prior) {
 async function api(request,env,path) {
   const p = provider(request,env);
   if (path === '/api/status' && request.method === 'GET') return json({mode:p?.binding ? 'binding' : p?.mode ?? 'missing'});
+  if (bindingOnly(env) && !p && request.method === 'POST') return json({error:'Workers AI belum tersedia. Administrator perlu memeriksa binding AI pada Worker Cloudflare.'},503);
   if (request.method !== 'POST') return json({error:'Metode tidak tersedia.'},405);
   if (path === '/api/test') {
     const sample = await generateJSON(p,'Return {"ready":true}.',{language:'Indonesia'});
@@ -160,6 +163,14 @@ async function api(request,env,path) {
   const prior = Array.isArray(data.prior) ? data.prior.slice(0,100).map(clean).filter(Boolean) : [];
   return json({items:await generateBatch(p,config,data.draft,batch,prior)});
 }
+function homePage(env) {
+  const ready = typeof env.AI?.run === 'function';
+  if (!ready && !bindingOnly(env)) return assets['/'];
+  return assets['/']
+    .replace(/<!-- api-settings-(nav|panel) -->[\s\S]*?<!-- \/api-settings-\1 -->/g,'')
+    .replace(/<!-- ai-status -->.*?<!-- \/ai-status -->/,
+      '<span class="connection" role="status" data-ok="'+ready+'">'+(ready?'Workers AI tersedia':'Workers AI belum tersedia')+'</span>');
+}
 export default {
   async fetch(request,env = {}) {
     const path = new URL(request.url).pathname;
@@ -171,6 +182,6 @@ export default {
     }
     if (!Object.hasOwn(assets,path)) return new Response('Halaman tidak ditemukan.',{status:404});
     const mime = path.endsWith('.css') ? 'text/css' : path.endsWith('.js') ? 'text/javascript' : 'text/html';
-    return new Response(assets[path],{headers:{'Content-Type':mime+'; charset=utf-8','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'self'"}});
+    return new Response(path === '/' ? homePage(env) : assets[path],{headers:{'Content-Type':mime+'; charset=utf-8','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'self'"}});
   }
 };

@@ -325,7 +325,7 @@ document.querySelectorAll('[data-view]').forEach(button=>button.addEventListener
   show(button.dataset.view);
 }));
 document.querySelector('.brand').addEventListener('click',event=>{event.preventDefault();show('setup');});
-$('ai-form').addEventListener('submit',async event=>{
+$('ai-form')?.addEventListener('submit',async event=>{
   event.preventDefault();
   if(busy) return;
   const auth={account:$('account').value.trim(),token:$('token').value.trim()};
@@ -424,4 +424,4 @@ async function restore() {
   setDraft();displayReview();displayFiles();
 }
 restore();
-api('status').then(result=>{mode=result.mode;displayConnection();}).catch(()=>displayConnection());
+if ($('connection')) api('status').then(result=>{mode=result.mode;displayConnection();}).catch(()=>displayConnection());

@@ -10,10 +10,12 @@
     <button type="button" data-view="review"><span>3</span> Soal dan telaah</button>
     <button type="button" data-view="exports"><span>4</span> Dokumen Word</button>
   </nav>
+  <!-- api-settings-nav -->
   <button type="button" class="settings" data-view="settings">Pengaturan AI</button>
+  <!-- /api-settings-nav -->
 </aside>
 <main>
-  <header class="top"><span>Ruang Kerja Asesmen</span><button id="connection" class="connection" type="button" data-view="settings">Memeriksa Cloudflare</button></header>
+  <header class="top"><span>Ruang Kerja Asesmen</span><!-- ai-status --><button id="connection" class="connection" type="button" data-view="settings">Memeriksa Cloudflare</button><!-- /ai-status --></header>
   <div class="workspace">
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
     <section id="setup" class="view">
@@ -43,6 +45,7 @@
       <div class="intro"><h1>Dokumen Word</h1><p>Unduh tujuh dokumen asesmen dalam satu ZIP atau unduh tiap dokumen secara terpisah.</p></div>
       <article class="card"><div class="progress-head"><h2 id="doc-count">0/7 dokumen siap</h2><button id="download-all" class="primary" type="button" disabled>Unduh ZIP</button></div><p id="export-note" class="help">Dokumen tersedia setelah seluruh butir ditelaah dan disetujui.</p><div id="doc-list"></div></article>
     </section>
+    <!-- api-settings-panel -->
     <section id="settings" class="view" hidden>
       <div class="intro"><h1>Pengaturan AI</h1><p>Hubungkan akun Cloudflare Workers AI untuk generasi teks dan ilustrasi.</p></div>
       <form class="card" id="ai-form"><h2>Cloudflare Workers AI</h2><p id="ai-status" class="help"></p><div class="fields">
@@ -50,6 +53,7 @@
         <label>API Token<input id="token" type="password" autocomplete="off" placeholder="Token dengan izin Workers AI"></label>
       </div><p class="help">Token sesi hanya digunakan selama halaman terbuka. Untuk pengaturan tetap, gunakan secret <code>CLOUDFLARE_ACCOUNT_ID</code> dan <code>CLOUDFLARE_API_TOKEN</code> di Sites.</p><p class="help">Grafik batang, garis, dan diagram juring digambar dari data numerik. Ilustrasi bebas memakai FLUX.1 [schnell].</p><div class="actions"><button class="primary" type="submit" id="test-ai">Uji teks dan gambar</button><a href="https://developers.cloudflare.com/workers-ai/get-started/rest-api/" target="_blank" rel="noopener noreferrer">Panduan Cloudflare</a></div></form>
     </section>
+    <!-- /api-settings-panel -->
   </div>
 </main>
 </div>

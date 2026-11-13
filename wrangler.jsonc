@@ -2,6 +2,9 @@
   "name": "universal-assessment-generator-v2",
   "main": "dist/server/index.js",
   "compatibility_date": "2026-11-13",
+  "vars": {
+    "WORKERS_AI_ONLY": "true"
+  },
   "ai": {
     "binding": "AI"
   }

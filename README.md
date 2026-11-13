@@ -16,7 +16,7 @@ Di Cloudflare Dashboard, buka **Workers & Pages → Create application → Impor
 
 Jika nama Worker yang sudah ada berbeda, sesuaikan `name` di `wrangler.jsonc` atau gunakan `npx wrangler deploy --name NAMA-WORKER` sebagai deploy command. Jika aplikasi sebelumnya dibuat sebagai proyek **Pages**, buat proyek **Workers** dari repositori ini dan gunakan URL yang diberikan Worker setelah deploy sukses.
 
-`wrangler.jsonc` menetapkan `dist/server/index.js` sebagai entry point. Worker ini menyajikan halaman utama, CSS, JavaScript, dan rute `/api/*`. Buka URL utama Worker yang tampil di dashboard Cloudflare, lalu buka **Pengaturan AI → Uji teks dan gambar**. Binding Workers AI bernama `AI` menggunakan akun Cloudflare yang menjalankan Worker.
+`wrangler.jsonc` menetapkan `dist/server/index.js` sebagai entry point. Worker ini menyajikan halaman utama, CSS, JavaScript, dan rute `/api/*`. Buka URL utama Worker yang tampil di dashboard Cloudflare. Status **Workers AI tersedia** menandakan binding `AI` sudah terpasang. Guru dapat langsung membuat draf asesmen tanpa mengisi Account ID atau API Token. Jika statusnya **Workers AI belum tersedia**, periksa **Bindings** pada Worker dan pastikan binding Workers AI bernama `AI` ikut terdeploy.
 
 ## Pengembangan lokal
 
