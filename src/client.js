@@ -130,7 +130,7 @@ function message(text='',error=false) {
 }
 function lock(locked) {
   busy=locked;
-  document.querySelectorAll('form button[type=submit]').forEach(button=>button.disabled=locked);
+  document.querySelectorAll('form:not(#chat-form) button[type=submit]').forEach(button=>button.disabled=locked);
   $('generate').disabled=locked || !state.accepted;
   $('approve').disabled=locked || !$('approve-check').checked;
 }
@@ -149,6 +149,76 @@ function displayConnection() {
   $('connection').dataset.ok=connected;
   $('ai-status').textContent=connected ? 'Uji model teks dan model gambar berhasil.' : ['server','binding'].includes(mode) ? 'Konfigurasi server tersedia. Jalankan uji untuk memeriksa akses model.' : 'Masukkan Account ID dan API Token Cloudflare untuk mengaktifkan generasi.';
   for (const key of ['account','token']) $(key).disabled=['server','binding'].includes(mode);
+}
+const chatHistory = [];
+function addChatMessage(role,text) {
+  const row=el('article','','chat-turn');
+  row.dataset.role=role;
+  const content=el('p',text);
+  content.dir='auto';
+  row.append(el('strong',role==='user'?'Anda':'AI Materi'),content);
+  if (role==='assistant') {
+    const use=el('button','Tambahkan ke materi asesmen','secondary');
+    use.type='button';
+    use.addEventListener('click',()=>{
+      const material=$('material');
+      const combined=[material.value.trim(),text].filter(Boolean).join('\n\n');
+      show('setup');
+      if (combined.length>material.maxLength) {
+        message('Materi melebihi 18.000 karakter. Ringkas isi yang ada atau minta AI membuat jawaban lebih singkat.',true);
+      } else {
+        material.value=combined;
+        message('Jawaban AI ditambahkan ke materi asesmen.');
+      }
+      material.focus();
+    });
+    row.append(use);
+  }
+  const log=$('chat-messages');
+  log.append(row);
+  log.scrollTop=log.scrollHeight;
+}
+function setupChat() {
+  const input=$('chat-input'), status=$('chat-status'), send=$('chat-send'), clear=$('chat-clear');
+  for (const button of $('chat-suggestions').querySelectorAll('button')) button.addEventListener('click',()=>{
+    input.value=button.textContent;
+    input.focus();
+  });
+  clear.addEventListener('click',()=>{
+    chatHistory.length=0;
+    $('chat-messages').replaceChildren();
+    $('chat-suggestions').hidden=false;
+    clear.disabled=true;
+    status.textContent='';
+    input.value='';
+    input.focus();
+  });
+  $('chat-form').addEventListener('submit',async event=>{
+    event.preventDefault();
+    const question=clean(input.value);
+    if (send.disabled || !question) return;
+    send.disabled=true;
+    clear.disabled=true;
+    input.readOnly=true;
+    status.textContent='AI sedang menyusun materi…';
+    const context=Object.fromEntries(['level','grade','curriculum','subject','language'].map(key=>[key,$(key).value]));
+    try {
+      const {answer}=await api('chat',{question,context,history:chatHistory.slice(-8)});
+      if (!clean(answer)) throw new Error('Jawaban AI kosong. Coba kirim ulang.');
+      chatHistory.push({role:'user',text:question},{role:'assistant',text:answer});
+      $('chat-suggestions').hidden=true;
+      addChatMessage('user',question);
+      addChatMessage('assistant',answer);
+      input.value='';
+      status.textContent='';
+    } catch(error) {status.textContent=error.message;}
+    finally {
+      send.disabled=false;
+      clear.disabled=chatHistory.length===0;
+      input.readOnly=false;
+      if (workingView==='chat') input.focus();
+    }
+  });
 }
 function setDraft() {
   $('draft-empty').hidden=!!state.draft;
@@ -320,6 +390,7 @@ function displayFiles() {
   }));
 }
 fillForm();
+setupChat();
 document.querySelectorAll('[data-view]').forEach(button=>button.addEventListener('click',()=>{
   if (!busy) message();
   show(button.dataset.view);

@@ -128,6 +128,30 @@ async function generateBatch(p,config,draft,batch,prior) {
   console.warn('assessment_item_rejected', {number:batch[0].no,type:batch[0].type,issues:feedback});
   throw problem('Soal nomor '+batch[0].no+' belum lolos setelah percobaan ulang. '+feedback.join(' ')+' Klik Lanjutkan generasi untuk mencoba nomor ini lagi.',422);
 }
+async function chat(p, data) {
+  const question = clean(data?.question);
+  if (!question || question.length > 2000) throw problem('Tulis pertanyaan antara 1 dan 2.000 karakter.');
+  const history = data.history ?? [];
+  if (!Array.isArray(history) || history.length > 8 || history.length % 2 !== 0 ||
+      history.some((turn,index)=>turn?.role !== (index % 2 ? 'assistant' : 'user') ||
+        !clean(turn.text) || turn.text.length > (index % 2 ? 7000 : 2000))) {
+    throw problem('Format riwayat percakapan tidak sah.');
+  }
+  const context = Object.fromEntries(['level','grade','curriculum','subject','language'].flatMap(key=>{
+    const value=clean(data.context?.[key]).slice(0,150);
+    return value ? [[key,value]] : [];
+  }));
+  const result = await runAI(p,textModel,{
+    messages:[
+      {role:'system',content:'You are an educational subject tutor for school teachers. Explain, summarize or compare concepts, with worked examples as relevant. Follow the latest question, using classroom context only when the question leaves it open. Default to Indonesian. Use plain text, short headings and paragraphs, and keep the answer concise enough to reuse as assessment source material. Check calculations and factual claims. Indicate uncertainty where appropriate. You have no internet access. Never fabricate citations, browsing claims, URLs or official curriculum wording. Keep the conversation focused on learning material.'},
+      ...history.map(turn=>({role:turn.role,content:clean(turn.text)})),
+      {role:'user',content:JSON.stringify({question,classroomContext:context})}
+    ],temperature:0.4,max_tokens:1600
+  });
+  const answer = clean(result?.response ?? result?.choices?.[0]?.message?.content ?? result);
+  if (!answer || answer.length > 7000) throw problem('AI belum menghasilkan jawaban yang dapat digunakan. Coba pertanyaan yang lebih spesifik.',502);
+  return json({answer});
+}
 async function api(request,env,path) {
   const p = provider(request,env);
   if (path === '/api/status' && request.method === 'GET') return json({mode:p?.binding ? 'binding' : p?.mode ?? 'missing'});
@@ -138,11 +162,12 @@ async function api(request,env,path) {
     if (sample.ready !== true) throw problem('Model teks belum lolos uji respons.',502);
     return json({text:true, image: !!(await generateImage(p,'Simple black and white school worksheet illustration of an apple on a white background, centered, no text.'))});
   }
-  if (!['/api/draft','/api/batch','/api/image'].includes(path)) return json({error:'Halaman tidak ditemukan.'},404);
+  if (!['/api/draft','/api/batch','/api/image','/api/chat'].includes(path)) return json({error:'Halaman tidak ditemukan.'},404);
   const raw = await request.text();
   if (raw.length > 90000) throw problem('Ukuran permintaan terlalu besar.',413);
   let data;
   try {data = JSON.parse(raw);} catch {throw problem('Data permintaan tidak sah.');}
+  if (path === '/api/chat') return chat(p,data);
   if (path === '/api/image') {
     const prompt = clean(data?.prompt);
     if (!prompt || prompt.length > 2000) throw problem('Deskripsi ilustrasi harus berisi 1–2.000 karakter.');

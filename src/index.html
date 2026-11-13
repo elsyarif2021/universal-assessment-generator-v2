@@ -9,6 +9,7 @@
     <button type="button" data-view="draft"><span>2</span> CP, ATP, dan TP</button>
     <button type="button" data-view="review"><span>3</span> Soal dan telaah</button>
     <button type="button" data-view="exports"><span>4</span> Dokumen Word</button>
+    <button type="button" data-view="chat">AI Chat Materi</button>
   </nav>
   <!-- api-settings-nav -->
   <button type="button" class="settings" data-view="settings">Pengaturan AI</button>
@@ -22,7 +23,7 @@
       <div class="intro"><h1>Konfigurasi asesmen</h1><p>Tentukan sasaran, materi, dan komposisi soal sebelum menyusun tujuan pembelajaran.</p></div>
       <form id="config-form">
         <article class="card"><h2>Identitas pembelajaran</h2><div id="identity-fields" class="fields"></div></article>
-        <article class="card"><h2>Materi dan bahasa</h2><div id="content-fields" class="fields"></div><label for="material">Materi yang diujikan</label><textarea id="material" name="material" rows="5" required maxlength="18000" placeholder="Contoh: Keliling lingkaran, panjang busur, dan luas juring. Sertakan stimulus atau data jika sudah tersedia."></textarea><p class="help">Saran mapel dan materi adalah acuan awal. Cocokkan dengan kurikulum dan materi yang telah diajarkan.</p><div id="material-bank" class="chips"></div></article>
+        <article class="card"><h2>Materi dan bahasa</h2><div id="content-fields" class="fields"></div><label for="material">Materi yang diujikan</label><textarea id="material" name="material" rows="5" required maxlength="18000" placeholder="Contoh: Keliling lingkaran, panjang busur, dan luas juring. Sertakan stimulus atau data jika sudah tersedia."></textarea><p class="help">Saran mapel dan materi adalah acuan awal. Cocokkan dengan kurikulum dan materi yang telah diajarkan.</p><div id="material-bank" class="chips"></div><div class="actions"><button class="secondary" type="button" data-view="chat">Cari materi dengan AI</button></div></article>
         <article class="card"><h2>Komposisi soal</h2><div class="counts" id="counts"></div><div class="fields" id="option-fields"></div><p class="help">PG TKA menggunakan lebih dari satu jawaban benar. Setiap soal tetap memiliki minimal satu pengecoh.</p><p id="total" class="total"></p></article>
         <div class="actions"><button class="primary" type="submit">Konfirmasi dan buat draf</button></div>
       </form>
@@ -44,6 +45,25 @@
     <section id="exports" class="view" hidden>
       <div class="intro"><h1>Dokumen Word</h1><p>Unduh tujuh dokumen asesmen dalam satu ZIP atau unduh tiap dokumen secara terpisah.</p></div>
       <article class="card"><div class="progress-head"><h2 id="doc-count">0/7 dokumen siap</h2><button id="download-all" class="primary" type="button" disabled>Unduh ZIP</button></div><p id="export-note" class="help">Dokumen tersedia setelah seluruh butir ditelaah dan disetujui.</p><div id="doc-list"></div></article>
+    </section>
+    <section id="chat" class="view" hidden>
+      <div class="intro"><h1>AI Chat Materi</h1><p>Cari penjelasan, rangkuman, dan contoh materi sesuai jenjang dan mata pelajaran.</p></div>
+      <article class="card chat-card">
+        <div class="progress-head"><h2>Percakapan</h2><button class="secondary" type="button" id="chat-clear" disabled>Percakapan baru</button></div>
+        <p class="help">Jawaban dibuat oleh AI tanpa penelusuran web. Periksa isi sebelum digunakan sebagai materi asesmen.</p>
+        <div id="chat-messages" class="chat-messages" role="log" aria-label="Percakapan materi" aria-live="polite" aria-relevant="additions"></div>
+        <div id="chat-suggestions" class="chips" aria-label="Contoh pertanyaan">
+          <button type="button">Ringkas globalisasi untuk Sosiologi kelas XII</button>
+          <button type="button">Jelaskan pecahan senilai dengan contoh</button>
+          <button type="button">Buat materi busur dan juring lingkaran</button>
+        </div>
+        <form id="chat-form">
+          <label for="chat-input">Pertanyaan atau topik</label>
+          <textarea id="chat-input" rows="3" maxlength="2000" required placeholder="Contoh: Jelaskan perubahan sosial untuk kelas XII, dengan contoh di lingkungan sekolah."></textarea>
+          <p id="chat-status" class="help" role="status"></p>
+          <div class="actions"><button class="primary" id="chat-send" type="submit">Kirim pertanyaan</button></div>
+        </form>
+      </article>
     </section>
     <!-- api-settings-panel -->
     <section id="settings" class="view" hidden>

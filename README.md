@@ -18,6 +18,10 @@ Jika nama Worker yang sudah ada berbeda, sesuaikan `name` di `wrangler.jsonc` at
 
 `wrangler.jsonc` menetapkan `dist/server/index.js` sebagai entry point. Worker ini menyajikan halaman utama, CSS, JavaScript, dan rute `/api/*`. Buka URL utama Worker yang tampil di dashboard Cloudflare. Status **Workers AI tersedia** menandakan binding `AI` sudah terpasang. Guru dapat langsung membuat draf asesmen tanpa mengisi Account ID atau API Token. Jika statusnya **Workers AI belum tersedia**, periksa **Bindings** pada Worker dan pastikan binding Workers AI bernama `AI` ikut terdeploy.
 
+## AI Chat Materi
+
+Buka **AI Chat Materi** untuk meminta penjelasan atau rangkuman dan mengajukan pertanyaan lanjutan. Klik **Tambahkan ke materi asesmen** pada jawaban yang ingin dipakai. Chat memakai binding Workers AI yang sama dan menghasilkan jawaban dari model tanpa penelusuran web.
+
 ## Pengembangan lokal
 
 Jalankan `npm run dev`, lalu buka `http://localhost:3000`. Gunakan `npm run build` dan `npm test` untuk memeriksa build dan ekspor dokumen.
