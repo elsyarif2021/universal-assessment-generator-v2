@@ -38,9 +38,17 @@
     </section>
     <section id="review" class="view" hidden>
       <div class="intro"><h1>Soal dan telaah</h1><p>Periksa isi, jawaban, skor, bahasa, materi, dan kesesuaian setiap butir dengan tujuan pembelajaran.</p></div>
-      <article class="card"><div class="progress-head"><strong id="progress-label">0 dari 0 soal valid</strong><span id="reviewed-label"></span></div><progress id="progress" value="0" max="1"></progress><p id="batch-label" class="help"></p><button class="primary" type="button" id="generate">Buat soal</button></article>
+      <article class="card"><div class="progress-head"><strong id="progress-label">0 dari 0 soal valid</strong><span id="package-review-label"></span></div><progress id="progress" value="0" max="1"></progress><p id="batch-label" class="help"></p><button class="primary" type="button" id="generate">Buat soal</button></article>
+      <article class="card" id="package-audit" hidden>
+        <div class="progress-head"><h2>Audit paket asesmen</h2><button class="secondary" id="bulk-review" type="button">Telaah Massal</button></div>
+        <p class="help">Periksa seluruh paket sekaligus. Buka butir yang ingin diperiksa atau disunting pada daftar soal.</p>
+        <div id="audit-result" aria-live="polite"></div>
+        <div id="approval" hidden>
+          <label class="check"><input id="approve-check" type="checkbox">Saya telah menelaah paket ini, termasuk ketepatan isi, kunci, bahasa, gambar, dan kesesuaiannya dengan materi serta tujuan pembelajaran.</label>
+          <button class="primary" id="approve" type="button" disabled>Setujui paket dan siapkan dokumen</button>
+        </div>
+      </article>
       <div id="items"></div>
-      <article class="card" id="approval" hidden><h2>Persetujuan guru</h2><label class="check"><input id="approve-check" type="checkbox">Saya sudah menelaah seluruh butir, gambar, tujuan pembelajaran, dan kelayakan tujuh dokumen untuk penggunaan di kelas.</label><button class="primary" id="approve" type="button" disabled>Setujui dan siapkan dokumen</button></article>
     </section>
     <section id="exports" class="view" hidden>
       <div class="intro"><h1>Dokumen Word</h1><p>Unduh tujuh dokumen asesmen dalam satu ZIP atau unduh tiap dokumen secara terpisah.</p></div>

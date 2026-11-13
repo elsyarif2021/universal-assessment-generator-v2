@@ -6,7 +6,8 @@ const storage = new Promise(resolve => {
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => resolve(null);
 });
-let state = {config:null,draft:null,accepted:false,items:[],pending:[],reviewed:[],approved:false};
+let state = {config:null,draft:null,accepted:false,items:[],pending:[],approved:false};
+let packageAudit = null;
 let busy = false, workingView = 'setup', credentials = null, connected = false, mode = 'missing', files = [];
 const subjects = {
   elementary:['Bahasa Indonesia','Matematika','IPAS','Pendidikan Pancasila','Bahasa Inggris','PAI dan Budi Pekerti','PJOK','Seni Budaya','Bahasa Arab','Al-Qur’an Hadis','Akidah Akhlak','Fikih','SKI'],
@@ -132,6 +133,7 @@ function lock(locked) {
   busy=locked;
   document.querySelectorAll('form:not(#chat-form) button[type=submit]').forEach(button=>button.disabled=locked);
   $('generate').disabled=locked || !state.accepted;
+  $('bulk-review').disabled=locked;
   $('approve').disabled=locked || !$('approve-check').checked;
 }
 async function api(path,body,auth=credentials) {
@@ -279,38 +281,69 @@ function draw(visual) {
   }
   return canvas.toDataURL('image/png');
 }
+function displayPackageAudit() {
+  const complete = !!state.config && state.accepted && state.items.length===plan(state.config).length && !state.pending.length;
+  $('package-audit').hidden=!complete;
+  $('bulk-review').disabled=busy || !complete;
+  $('package-review-label').textContent=state.approved ? 'Paket disetujui' : packageAudit ? (packageAudit.errors.length ? 'Perlu perbaikan' : 'Audit teknis lulus') : '';
+  $('approval').hidden=!packageAudit || packageAudit.errors.length>0;
+  $('approve-check').checked=state.approved;
+  $('approve').disabled=busy || !state.approved;
+  const result=$('audit-result');
+  result.replaceChildren();
+  if (!packageAudit) return;
+  const {errors,total,counts,points,mappedObjectives}=packageAudit;
+  result.append(el('p',errors.length ? errors.length+' temuan perlu diperbaiki.' : 'Audit teknis lulus untuk '+total+' soal.','audit-summary'));
+  result.append(el('p',types.map((type,index)=>type+': '+counts[index]+' / '+state.config.counts[index]).join(' · '),'help'));
+  if (errors.length) {
+    const list=el('ul');
+    for (const error of errors) {
+      const entry=el('li',error);
+      const number=error.match(/^No\. (\d+) —/)?.[1];
+      if (number && state.items.some(item=>String(item.no)===number)) {
+        const link=el('a','Buka soal '+number);
+        link.href='#question-'+number;
+        link.addEventListener('click',()=>{
+          const question=$('question-'+number);
+          if (question) question.open=true;
+        });
+        entry.append(' ',link);
+      }
+      list.append(entry);
+    }
+    result.append(list);
+  } else {
+    result.append(el('p','Skor maksimum: '+points+' poin. Tujuan terpetakan: '+mappedObjectives+' dari '+state.draft.tp.length+'.','help'),
+      el('p','Audit memeriksa penomoran, duplikasi, format opsi dan kunci, rujukan tujuan, rubrik, serta kelengkapan visual. Ketepatan isi dan bahasa diperiksa oleh guru.','help'));
+  }
+}
+function invalidatePackageAudit() {
+  packageAudit=null;
+  state.approved=false;
+  files=[];
+}
+$('bulk-review').addEventListener('click',()=>{
+  if (busy || !state.accepted || state.pending.length || state.items.length!==plan(state.config).length) return;
+  packageAudit=auditPackage(state.items,state.config,state.draft);
+  displayPackageAudit();
+});
 function displayReview() {
   const total=state.config ? plan(state.config).length : 0;
   const remaining=state.pending.length ? state.pending : state.config ? nextBatch(state.config,state.items.length) : [];
   const range=remaining.length ? remaining[0].no+(remaining.length>1 ? '–'+remaining.at(-1).no : '') : '';
   $('progress-label').textContent=state.items.length+' dari '+total+' soal valid';
-  $('reviewed-label').textContent=state.reviewed.length+' ditelaah';
   $('progress').max=total || 1; $('progress').value=state.items.length;
   $('batch-label').textContent=!state.accepted ? 'Setujui draf CP, ATP, dan TP terlebih dahulu.' : state.items.length===total ? 'Seluruh soal tersedia untuk ditelaah.' : 'Batch berikutnya: nomor '+range+'.';
   $('generate').hidden=total>0 && state.items.length===total;
   $('generate').disabled=busy || !state.accepted;
   $('generate').textContent=state.items.length || state.pending.length ? 'Lanjutkan generasi' : 'Buat soal';
-  $('approval').hidden=!(total && state.items.length===total && state.reviewed.length===total);
-  $('approve-check').checked=state.approved;
-  $('approve').disabled=!state.approved;
+  displayPackageAudit();
   $('items').replaceChildren(...state.items.map(renderItem));
 }
 function renderItem(item) {
   const panel=el('details','','card item');
-  const title=el('summary','No. '+item.no+' · '+types[item.type]+' · '+(state.reviewed.includes(item.no)?'Sudah ditelaah':'Perlu telaah'));
-  const check=el('label','','check'), input=el('input');
-  input.type='checkbox'; input.checked=state.reviewed.includes(item.no);
-  input.addEventListener('change',async()=>{
-    state.reviewed=state.reviewed.filter(no=>no!==item.no);
-    if (input.checked) state.reviewed.push(item.no);
-    state.approved=false;files=[];
-    title.textContent='No. '+item.no+' · '+types[item.type]+' · '+(input.checked?'Sudah ditelaah':'Perlu telaah');
-    $('reviewed-label').textContent=state.reviewed.length+' ditelaah';
-    $('approval').hidden=state.reviewed.length!==plan(state.config).length;
-    $('approve-check').checked=false;$('approve').disabled=true;
-    displayFiles();await persist();
-  });
-  check.append(input,document.createTextNode('Butir ini sudah saya telaah.'));
+  panel.id='question-'+item.no;
+  const title=el('summary','No. '+item.no+' · '+types[item.type]);
   const stem=el('p',item.stem);
   stem.dir='auto';
   panel.append(title,stem);
@@ -332,7 +365,7 @@ function renderItem(item) {
     textLine('Analisis kualitatif',item.analysis),textLine('Pokok rangkuman',item.concept));
   const edit=el('button','Sunting butir','secondary');edit.type='button';
   edit.addEventListener('click',()=>editItem(item,panel));
-  panel.append(check,edit);
+  panel.append(edit);
   return panel;
 }
 function editItem(item,panel) {
@@ -371,7 +404,7 @@ function editItem(item,panel) {
     if (state.items.some(other=>other.no!==item.no && normalized(other.stem)===normalized(revised.stem))) errors.push('Batang soal berulang.');
     if (errors.length) {status.textContent=errors.join(' ');return;}
     state.items[item.no-1]=revised;
-    state.reviewed=state.reviewed.filter(no=>no!==item.no);state.approved=false;files=[];
+    invalidatePackageAudit();
     displayReview();displayFiles();await persist();
   });
 }
@@ -423,7 +456,7 @@ $('config-form').addEventListener('submit',async event=>{
   lock(true);message('Menyusun draf CP, ATP, dan TP…');
   try {
     const draft=await api('draft',{config});
-    state={config,draft,accepted:false,items:[],pending:[],reviewed:[],approved:false};files=[];
+    state={config,draft,accepted:false,items:[],pending:[],approved:false};invalidatePackageAudit();
     setDraft();displayReview();displayFiles();await persist();message();show('draft');
   } catch(error) {message(error.message,true);}
   finally {lock(false);}
@@ -435,7 +468,7 @@ $('draft-form').addEventListener('submit',async event=>{
   const changed=JSON.stringify(state.draft)!==JSON.stringify(draft);
   if (changed && state.items.length && !window.confirm('Perubahan tujuan akan memulai kembali penyusunan soal. Lanjutkan?')) return;
   lock(true);
-  if (changed) {state.items=[];state.pending=[];state.reviewed=[];state.approved=false;files=[];}
+  if (changed) {state.items=[];state.pending=[];invalidatePackageAudit();}
   state.draft=draft;state.accepted=true;await persist();
   lock(false);displayReview();displayFiles();message();show('review');
   await generateQuestions();
@@ -464,17 +497,17 @@ async function generateQuestions() {
         state.items.push(item);state.pending.shift();await persist();displayReview();
       }
     }
-    message('Seluruh soal tersedia. Buka tiap butir untuk menelaah dan menyetujuinya.');
+    message('Seluruh soal tersedia. Klik Telaah Massal untuk mengaudit paket.');
   } catch(error) {message(error.message,true);}
   finally {lock(false);displayReview();}
 }
 $('approve-check').addEventListener('change',()=>{$('approve').disabled=busy || !$('approve-check').checked;});
 $('approve').addEventListener('click',async()=>{
-  if(busy || !$('approve-check').checked || state.reviewed.length!==plan(state.config).length) return;
+  if (busy || !$('approve-check').checked || !packageAudit || packageAudit.errors.length) return;
   try {
     lock(true);
     files=buildDocuments(state.config,state.draft,state.items);
-    state.approved=true;await persist();displayFiles();message();show('exports');
+    state.approved=true;await persist();displayPackageAudit();displayFiles();message();show('exports');
   } catch(error){message(error.message,true);}
   finally {lock(false);}
 });
@@ -492,7 +525,7 @@ async function restore() {
       saved.config.counts.forEach((count,i)=>$('count'+i).value=count);
       updateBank();updateTotal();
       if (state.approved) {
-        try {files=buildDocuments(state.config,state.draft,state.items);}
+        try {files=buildDocuments(state.config,state.draft,state.items);packageAudit=auditPackage(state.items,state.config,state.draft);}
         catch {state.approved=false;}
       }
     }

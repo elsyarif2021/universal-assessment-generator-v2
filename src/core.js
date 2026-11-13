@@ -50,12 +50,26 @@ function itemErrors(item, expected, config, draft, requireVisual = false) {
 const rawScore = item => isPG(item.type) ? 1 : item.rubric.reduce((total, row) => total + row.points, 0);
 function audit(items, config, draft) {
   const seen = new Set();
-  return plan(config).flatMap((expected,index) => {
+  const expectedItems = plan(config);
+  const errors = expectedItems.flatMap((expected,index) => {
     const item = items[index];
+    if (!item) return ['No. '+expected.no+' — Soal belum tersedia.'];
     const errors = itemErrors(item,expected,config,draft,true);
     const stem = normalized(item?.stem);
     if (stem && seen.has(stem)) errors.push('Batang soal berulang.');
     if (stem) seen.add(stem);
     return errors.map(error => 'No. ' + expected.no + ' — ' + error);
   });
+  if (items.length > expectedItems.length) errors.unshift('Jumlah soal melebihi target paket.');
+  return errors;
+}
+function auditPackage(items, config, draft) {
+  const errors = audit(items,config,draft);
+  return {
+    errors,
+    total:plan(config).length,
+    counts:types.map((_,type)=>items.filter(item=>item?.type===type).length),
+    points:errors.length ? null : items.reduce((total,item)=>total+rawScore(item),0),
+    mappedObjectives:new Set(items.filter(item=>Number.isInteger(item?.tp) && item.tp>=1 && item.tp<=draft.tp.length).map(item=>item.tp)).size
+  };
 }

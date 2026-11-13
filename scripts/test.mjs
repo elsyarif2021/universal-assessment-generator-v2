@@ -3,7 +3,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 import worker from '../dist/server/index.js';
 
 const shared = await Promise.all(['core','documents'].map(name=>readFile('src/'+name+'.js','utf8')));
-const {plan,itemErrors,audit,buildDocuments,zip} = new Function(shared.join('\n')+'\nreturn {plan,itemErrors,audit,buildDocuments,zip};')();
+const {plan,itemErrors,audit,auditPackage,buildDocuments,zip} = new Function(shared.join('\n')+'\nreturn {plan,itemErrors,audit,auditPackage,buildDocuments,zip};')();
 const config={level:'SMA',curriculum:'Merdeka',grade:'XII',semester:'Ganjil',subject:'Matematika',material:'Diagram batang dan data',language:'Bahasa Indonesia',languageCode:'id',options:3,counts:[1,1,1,1],font:'Arial'};
 const draft={cp:'Menganalisis data.',atp:['Membaca diagram.','Membandingkan data.'],tp:['Menafsirkan nilai pada grafik.']};
 const expected = plan(config);
@@ -21,6 +21,17 @@ assert.ok(itemErrors({...items[1],keys:['A']},expected[1],config,draft).some(x=>
 assert.ok(itemErrors({...items[1],keys:['A','A']},expected[1],config,draft).some(x=>x.includes('kunci')));
 assert.ok(itemErrors({...items[1],keys:['A','B','C']},expected[1],config,draft).some(x=>x.includes('kunci')));
 for (const size of [4,5]) assert.deepEqual(itemErrors({...items[1],options:['1','2','3','4','5'].slice(0,size)},expected[1],{...config,options:size},draft),[]);
+assert.deepEqual(auditPackage(items,config,draft),{errors:[],total:4,counts:[1,1,1,1],points:6,mappedObjectives:1});
+const invalidPackage=auditPackage([
+  items[0],
+  {...items[1],stem:items[0].stem,keys:['A'],tp:9},
+  items[2]
+],config,draft);
+assert.equal(invalidPackage.points,null);
+assert.deepEqual(invalidPackage.counts,[1,1,1,0]);
+assert.match(invalidPackage.errors.join(' '),/No. 2.*Rujukan TP.*No. 2.*dua kunci.*No. 2.*Batang soal berulang.*No. 4.*belum tersedia/);
+assert.match(auditPackage([...items,items[0]],config,draft).errors[0],/melebihi target/);
+assert.ok(auditPackage([{...items[0],visualData:null},...items.slice(1)],config,draft).errors.some(error=>error.includes('Gambar atau grafis belum tersedia')));
 assert.equal(buildDocuments(config,draft,items).length,7);
 if (process.argv[2]) await writeFile(process.argv[2],zip(buildDocuments(config,draft,items)));
 const hit=(path,body,env={})=>worker.fetch(new Request('https://example.test'+path,body?{method:'POST',body:JSON.stringify(body)}:undefined),env);
@@ -28,6 +39,7 @@ const local = await hit('/');
 assert.equal(local.status,200);
 const localHome = await local.text();
 assert.match(localHome,/id="ai-form"/);
+assert.match(localHome,/id="bulk-review"[^>]*>Telaah Massal/);
 for (const pattern of [/href="(\/style\.[a-f0-9]{12}\.css)"/,/src="(\/app\.[a-f0-9]{12}\.js)"/]) {
   const assetPath=localHome.match(pattern)?.[1];
   assert.ok(assetPath);
