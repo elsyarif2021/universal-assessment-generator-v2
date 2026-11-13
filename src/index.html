@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#18263a"><meta name="description" content="Susun, telaah, dan unduh perangkat asesmen dalam tujuh dokumen Word."><title>Universal Assessment Generator Pro</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<div class="layout">
+<aside>
+  <a class="brand" href="#setup"><span class="monogram" aria-hidden="true">UA</span><span>Universal Assessment<small>Generator Pro</small></span></a>
+  <nav aria-label="Tahapan asesmen">
+    <button type="button" data-view="setup" aria-current="step"><span>1</span> Konfigurasi</button>
+    <button type="button" data-view="draft"><span>2</span> CP, ATP, dan TP</button>
+    <button type="button" data-view="review"><span>3</span> Soal dan telaah</button>
+    <button type="button" data-view="exports"><span>4</span> Dokumen Word</button>
+  </nav>
+  <button type="button" class="settings" data-view="settings">Pengaturan AI</button>
+</aside>
+<main>
+  <header class="top"><span>Ruang Kerja Asesmen</span><button id="connection" class="connection" type="button" data-view="settings">Memeriksa Cloudflare</button></header>
+  <div class="workspace">
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <section id="setup" class="view">
+      <div class="intro"><h1>Konfigurasi asesmen</h1><p>Tentukan sasaran, materi, dan komposisi soal sebelum menyusun tujuan pembelajaran.</p></div>
+      <form id="config-form">
+        <article class="card"><h2>Identitas pembelajaran</h2><div id="identity-fields" class="fields"></div></article>
+        <article class="card"><h2>Materi dan bahasa</h2><div id="content-fields" class="fields"></div><label for="material">Materi yang diujikan</label><textarea id="material" name="material" rows="5" required maxlength="18000" placeholder="Contoh: Keliling lingkaran, panjang busur, dan luas juring. Sertakan stimulus atau data jika sudah tersedia."></textarea><p class="help">Saran mapel dan materi adalah acuan awal. Cocokkan dengan kurikulum dan materi yang telah diajarkan.</p><div id="material-bank" class="chips"></div></article>
+        <article class="card"><h2>Komposisi soal</h2><div class="counts" id="counts"></div><div class="fields" id="option-fields"></div><p class="help">PG TKA menggunakan lebih dari satu jawaban benar. Setiap soal tetap memiliki minimal satu pengecoh.</p><p id="total" class="total"></p></article>
+        <div class="actions"><button class="primary" type="submit">Konfirmasi dan buat draf</button></div>
+      </form>
+    </section>
+    <section id="draft" class="view" hidden>
+      <div class="intro"><h1>CP, ATP, dan TP</h1><p>Periksa dan sunting tujuan yang akan menjadi dasar penulisan soal.</p></div>
+      <article class="card" id="draft-empty"><p>Lengkapi konfigurasi untuk membuat draf tujuan pembelajaran.</p><button data-view="setup" class="secondary" type="button">Buka konfigurasi</button></article>
+      <form id="draft-form" hidden>
+        <article class="card"><div class="flag">Inferensi AI · Perlu verifikasi guru</div><label for="cp">Capaian Pembelajaran (CP)</label><textarea id="cp" rows="4" required></textarea><label for="atp">Alur Tujuan Pembelajaran (ATP)</label><textarea id="atp" rows="6" required></textarea><label for="tp">Tujuan Pembelajaran (TP)</label><textarea id="tp" rows="6" required></textarea><p class="help">Tulis satu pernyataan per baris untuk ATP dan TP. Nomor baris TP digunakan sebagai rujukan setiap soal.</p></article>
+        <div class="actions"><button class="primary" type="submit">Setujui tujuan dan lanjutkan</button></div>
+      </form>
+    </section>
+    <section id="review" class="view" hidden>
+      <div class="intro"><h1>Soal dan telaah</h1><p>Periksa isi, jawaban, skor, bahasa, materi, dan kesesuaian setiap butir dengan tujuan pembelajaran.</p></div>
+      <article class="card"><div class="progress-head"><strong id="progress-label">0 dari 0 soal valid</strong><span id="reviewed-label"></span></div><progress id="progress" value="0" max="1"></progress><p id="batch-label" class="help"></p><button class="primary" type="button" id="generate">Buat soal</button></article>
+      <div id="items"></div>
+      <article class="card" id="approval" hidden><h2>Persetujuan guru</h2><label class="check"><input id="approve-check" type="checkbox">Saya sudah menelaah seluruh butir, gambar, tujuan pembelajaran, dan kelayakan tujuh dokumen untuk penggunaan di kelas.</label><button class="primary" id="approve" type="button" disabled>Setujui dan siapkan dokumen</button></article>
+    </section>
+    <section id="exports" class="view" hidden>
+      <div class="intro"><h1>Dokumen Word</h1><p>Unduh tujuh dokumen asesmen dalam satu ZIP atau unduh tiap dokumen secara terpisah.</p></div>
+      <article class="card"><div class="progress-head"><h2 id="doc-count">0/7 dokumen siap</h2><button id="download-all" class="primary" type="button" disabled>Unduh ZIP</button></div><p id="export-note" class="help">Dokumen tersedia setelah seluruh butir ditelaah dan disetujui.</p><div id="doc-list"></div></article>
+    </section>
+    <section id="settings" class="view" hidden>
+      <div class="intro"><h1>Pengaturan AI</h1><p>Hubungkan akun Cloudflare Workers AI untuk generasi teks dan ilustrasi.</p></div>
+      <form class="card" id="ai-form"><h2>Cloudflare Workers AI</h2><p id="ai-status" class="help"></p><div class="fields">
+        <label>Cloudflare Account ID<input id="account" placeholder="32 karakter heksadesimal" autocomplete="off" pattern="[0-9a-fA-F]{32}"></label>
+        <label>API Token<input id="token" type="password" autocomplete="off" placeholder="Token dengan izin Workers AI"></label>
+      </div><p class="help">Token sesi hanya digunakan selama halaman terbuka. Untuk pengaturan tetap, gunakan secret <code>CLOUDFLARE_ACCOUNT_ID</code> dan <code>CLOUDFLARE_API_TOKEN</code> di Sites.</p><p class="help">Grafik batang, garis, dan diagram juring digambar dari data numerik. Ilustrasi bebas memakai FLUX.1 [schnell].</p><div class="actions"><button class="primary" type="submit" id="test-ai">Uji teks dan gambar</button><a href="https://developers.cloudflare.com/workers-ai/get-started/rest-api/" target="_blank" rel="noopener noreferrer">Panduan Cloudflare</a></div></form>
+    </section>
+  </div>
+</main>
+</div>
+</body></html>

@@ -1,0 +1,1 @@
+{"name":"universal-assessment-generator-pro","private":true,"type":"module","scripts":{"dev":"node scripts/dev.mjs","build":"node scripts/build.mjs","test":"node scripts/test.mjs"}}
