@@ -16,7 +16,15 @@ async function runAI(p, model, input) {
   if (!p) throw problem('Hubungkan akun Cloudflare Workers AI melalui menu Pengaturan AI.', 503);
   if (p.binding) {
     try {return await p.binding.run(model,input);}
-    catch {throw problem('Workers AI gagal merespons. Coba lagi dan periksa kuota akun.',502);}
+    catch (error) {
+      const status = Number(error?.status ?? error?.statusCode);
+      const code = String(error?.code ?? '');
+      console.warn('workers_ai_error',{model,status:Number.isInteger(status)?status:null,code:/^\d{1,8}$/.test(code)?code:null});
+      if (status===429 || /rate limit|quota|neuron/i.test(String(error?.message ?? ''))) {
+        throw problem('Kuota atau batas permintaan Workers AI tercapai. Periksa pemakaian di dashboard Cloudflare.',429);
+      }
+      throw problem('Workers AI gagal merespons. Periksa log Worker Cloudflare.',502);
+    }
   }
   let response;
   try {
@@ -141,20 +149,29 @@ async function chat(p, data) {
     const value=clean(data.context?.[key]).slice(0,150);
     return value ? [[key,value]] : [];
   }));
-  const result = await runAI(p,textModel,{
+  const input = {
     messages:[
       {role:'system',content:'You are an educational subject tutor for school teachers. Explain, summarize or compare concepts, with worked examples as relevant. Follow the latest question, using classroom context only when the question leaves it open. Default to Indonesian. Use plain text, short headings and paragraphs, and keep the answer concise enough to reuse as assessment source material. Check calculations and factual claims. Indicate uncertainty where appropriate. You have no internet access. Never fabricate citations, browsing claims, URLs or official curriculum wording. Keep the conversation focused on learning material.'},
       ...history.map(turn=>({role:turn.role,content:clean(turn.text)})),
       {role:'user',content:JSON.stringify({question,classroomContext:context})}
-    ],temperature:0.4,max_tokens:1600
-  });
-  const answer = clean(result?.response ?? result?.choices?.[0]?.message?.content ?? result);
-  if (!answer || answer.length > 7000) throw problem('AI belum menghasilkan jawaban yang dapat digunakan. Coba pertanyaan yang lebih spesifik.',502);
-  return json({answer});
+    ],temperature:0.4,max_tokens:1200
+  };
+  for (const model of [textModel,'@cf/meta/llama-3.1-8b-instruct-fp8']) {
+    try {
+      const result = await runAI(p,model,input);
+      const payload = result?.result ?? result;
+      const answer = clean(payload?.response ?? payload?.choices?.[0]?.message?.content ?? payload);
+      if (answer && answer.length <= 7000) return json({answer});
+    } catch (error) {
+      if (error.status !== 502 || model !== textModel) throw error;
+    }
+  }
+  throw problem('Model Workers AI belum menghasilkan jawaban yang dapat digunakan. Coba pertanyaan yang lebih singkat.',502);
 }
 async function api(request,env,path) {
   const p = provider(request,env);
   if (path === '/api/status' && request.method === 'GET') return json({mode:p?.binding ? 'binding' : p?.mode ?? 'missing'});
+  if (path === '/api/chat' && request.method === 'GET') return json({feature:'ai-chat-materi',build:buildId,binding:!!p?.binding});
   if (bindingOnly(env) && !p && request.method === 'POST') return json({error:'Workers AI belum tersedia. Administrator perlu memeriksa binding AI pada Worker Cloudflare.'},503);
   if (request.method !== 'POST') return json({error:'Metode tidak tersedia.'},405);
   if (path === '/api/test') {

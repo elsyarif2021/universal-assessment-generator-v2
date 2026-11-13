@@ -140,8 +140,11 @@ async function api(path,body,auth=credentials) {
   if (body) headers['Content-Type']='application/json';
   const response=await fetch('/api/'+path,{method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined});
   let result;
-  try {result=await response.json();} catch {throw new Error('Respons server tidak dapat dibaca. Muat ulang halaman jika sesi Sites telah berakhir.');}
-  if (!response.ok) throw new Error(result.error || 'Permintaan gagal.');
+  try {result=await response.json();} catch {
+    if (path==='chat') throw new Error('Server AI Chat mengembalikan respons yang tidak dapat dibaca (HTTP '+response.status+'). Pastikan URL yang dibuka adalah URL Worker dan deployment terbaru sudah aktif.');
+    throw new Error('Respons server tidak dapat dibaca. Muat ulang halaman jika sesi Sites telah berakhir.');
+  }
+  if (!response.ok) throw new Error((result.error || 'Permintaan gagal.')+(path==='chat'?' (HTTP '+response.status+')':''));
   return result;
 }
 function displayConnection() {
